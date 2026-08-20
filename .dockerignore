@@ -1,0 +1,25 @@
+# Keep the build context minimal and free of host-side secrets/artifacts.
+# node_modules are installed INSIDE the container (named volume), never copied
+# from the host — this also avoids host-built native binaries leaking in.
+node_modules
+**/node_modules
+dist
+dist-ssr
+coverage
+playwright-report
+test-results
+reports
+.stryker-tmp
+.git
+.gitignore
+.husky
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+# Never include host credential material in a build context
+**/.ssh
+**/.npmrc
+.vscode
+.idea

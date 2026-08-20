@@ -1,0 +1,7 @@
+# Pre-commit checks run INSIDE the Docker sandbox, not on the host, so eslint /
+# prettier / tsc / vitest / gitleaks never execute dependency code on your user
+# account. See scripts/run-hooks.sh and the `hooks` service in
+# docker-compose.yml.
+#
+# To bypass in an emergency (accepts the supply-chain risk): git commit --no-verify
+sh "$(dirname "$0")/../scripts/run-hooks.sh"

@@ -1,0 +1,62 @@
+# CI gate: lint, type-check, unit tests + coverage, and E2E. Mirrors the local
+# Docker sandbox commands. Dormant until a remote exists; runs on push/PR.
+#
+# NOTE: dependencies are installed with `npm ci --ignore-scripts` (matching the
+# repo .npmrc), so no package lifecycle scripts run in CI either.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install (no lifecycle scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Unit tests + coverage
+        run: npm run test:coverage
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install (no lifecycle scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+        env:
+          CI: '1'

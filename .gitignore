@@ -1,0 +1,55 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+dev-dist
+coverage
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+.eslintcache
+
+# Vitest
+__screenshots__/
+
+# Playwright
+/playwright-report/
+/playwright/.cache/
+/test-results/
+
+# Stryker mutation testing — generated report + scratch dir.
+/reports/
+/.stryker-tmp/
+
+# Local env
+.env
+.env.*
+!.env.example
+
+# Exported decisions saved while testing the app (user artifacts, not source)
+/*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!renovate.json
+!.prettierrc.json
+
+# Windows "mark of the web" sidecar files (WSL)
+*:Zone.Identifier

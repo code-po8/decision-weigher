@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":pinAllExceptPeerDependencies"],
+  "description": "Enforce the project's supply-chain policy: exact pins, a 7-day minimum release age, and digest-pinned Docker images. See DEVELOPMENT.md.",
+  "rangeStrategy": "pin",
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "npm": {
+    "rangeStrategy": "pin"
+  },
+  "docker": {
+    "pinDigests": true
+  },
+  "packageRules": [
+    {
+      "description": "Pin exact npm versions (no ^/~ ranges), matching .npmrc save-exact.",
+      "matchManagers": ["npm"],
+      "rangeStrategy": "pin"
+    },
+    {
+      "description": "Keep container base/image tags pinned to digests.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true
+    },
+    {
+      "description": "Group the dev toolchain so related bumps land together.",
+      "matchPackageNames": [
+        "vite",
+        "vitest",
+        "@vitest/coverage-v8",
+        "@vitejs/plugin-react"
+      ],
+      "groupName": "vite + vitest toolchain"
+    },
+    {
+      "description": "TypeScript stays on 6.x until typescript-eslint supports 7 (see dependency notes).",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7.0.0"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": "0 days"
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  }
+}

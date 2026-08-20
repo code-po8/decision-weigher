@@ -1,0 +1,67 @@
+# Development / test sandbox image for the frontend (and the test-runner).
+#
+# Purpose: execute all untrusted dependency code — npm install, the Vite dev
+# server, vitest, tsc, stryker — inside a container that has NO access to the
+# host home directory, SSH keys, or git credentials. The host is used only for
+# editing files and running git.
+#
+# Base image is pinned to a DIGEST for immutability (not just the floating
+# `24-bookworm-slim` tag). Node 24 is the current Active LTS. Resolved
+# 2026-08-19; node --version inside == v24.19.0. To bump: pull the new tag,
+# read its RepoDigest, and update both the tag and the @sha256 below together.
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03
+
+# tini for clean signal handling (Ctrl-C stops the dev server cleanly).
+# git is needed by the containerized pre-commit hooks (they read the git index).
+# ca-certificates lets the one-time gitleaks binary download (below) verify TLS
+# during the image build. procps provides `ps`, which Stryker shells out to when
+# reaping its test-runner children — without it a mutation run dies with
+# `spawn ps ENOENT`.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tini git ca-certificates curl procps \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=development
+WORKDIR /app
+
+# We deliberately do NOT copy source or run `npm install` at build time. Source
+# is bind-mounted and dependencies are installed at runtime into a named volume
+# (see docker-compose.yml). This keeps the image generic and ensures
+# node_modules never round-trips through the host filesystem.
+#
+# npm hardening: .npmrc sets ignore-scripts=true, so NO dependency lifecycle
+# scripts run on install. There are no allow-listed native deps today; if one is
+# introduced, rebuild it explicitly in the `install` service command.
+
+# Pre-create the volume mountpoints owned by the non-root `node` user. Docker
+# named volumes inherit the ownership of their mountpoint in the image, so this
+# makes the node_modules volume and the npm cache writable by `node` (npm runs
+# as non-root). Without this, a fresh named volume mounts root-owned and
+# `npm ci` fails with EACCES.
+RUN mkdir -p /app/node_modules /home/node/.npm \
+  && chown -R node:node /app /home/node/.npm
+
+# Drop to the unprivileged user for everything that follows.
+USER node
+
+# Bake the gitleaks binary into the image with a single, controlled fetch at
+# BUILD time, so the network-isolated `hooks` service can run the secret scan
+# OFFLINE at commit time. The scanner caches under ~/.gitleaks-cache.
+RUN GITLEAKS_VERSION=8.27.2; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+      x86_64) gl_arch=x64 ;; \
+      aarch64|arm64) gl_arch=arm64 ;; \
+      *) gl_arch="$arch" ;; \
+    esac; \
+    url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${gl_arch}.tar.gz"; \
+    dest="$HOME/.gitleaks-cache/v${GITLEAKS_VERSION}"; \
+    mkdir -p "$dest"; \
+    (curl -fsSL "$url" | tar -xz -C "$dest" gitleaks) \
+      && chmod +x "$dest/gitleaks" \
+      && "$dest/gitleaks" version \
+      || echo "WARN: gitleaks prefetch failed; hooks service will need network on first run";
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+# Default command is overridden per-service in docker-compose.yml.
+CMD ["node", "--version"]

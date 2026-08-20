@@ -1,0 +1,123 @@
+# Docker sandbox for development & testing.
+#
+# WHY: installing/running npm dependencies executes untrusted third-party code
+# (pre/post-install scripts, dev server, test runner). Running that on the host
+# user exposes ~/.ssh, ~/.npmrc tokens, cloud creds, git config, and the whole
+# home dir. These services run that code inside containers that bind-mount ONLY
+# the repo source — never $HOME, never ~/.ssh, with no git credentials present.
+#
+# Workflow:
+#   - Edit files and run `git` on the HOST (unchanged).
+#   - Run anything that executes dependency code via these services:
+#       docker compose run --rm install      # install deps into the volume
+#       docker compose run --rm test         # type-check + unit tests (no network)
+#       docker compose up frontend           # dev server at http://localhost:5173
+#       docker compose run --rm sentinel     # prove the sandbox is isolated
+#
+# node_modules live in a NAMED VOLUME (not bind-mounted), so the host's
+# node_modules is never touched and host-incompatible native builds stay
+# contained.
+
+x-frontend-base: &frontend-base
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  # Bind-mount ONLY the repository source. Note there is no $HOME or ~/.ssh
+  # mount anywhere in this file — that is the core isolation guarantee.
+  volumes:
+    - ./:/app:cached
+    - frontend_node_modules:/app/node_modules
+    # Persistent npm cache + home so npm's final reify/rename step has a stable,
+    # writable location (avoids "Exit handler never called" on volume mounts).
+    - npm_cache:/home/node/.npm
+  working_dir: /app
+  # Reassert non-root at the compose layer (the image already drops to `node`).
+  user: node
+  environment:
+    NODE_ENV: development
+    npm_config_cache: /home/node/.npm
+
+services:
+  # One-shot dependency install into the named volume. Run this first, or any
+  # time package.json/lockfile changes:  docker compose run --rm install
+  #
+  # With ignore-scripts=true (.npmrc) no package lifecycle scripts run during
+  # install. There are no allow-listed native deps today; if one is introduced,
+  # append an explicit `&& npm rebuild <dep>` here.
+  install:
+    <<: *frontend-base
+    command: >
+      sh -c "if [ -f package-lock.json ]; then npm ci; else npm install; fi"
+
+  # Vite dev server. Host 0.0.0.0 so it is reachable from the host browser.
+  #
+  # NOTE: run `docker compose run --rm install` FIRST (once, and after any
+  # package.json/lockfile change). We deliberately do NOT wire `depends_on:
+  # install` here — `depends_on` only waits for the container to START, not
+  # finish, so it would race a second `npm ci` against the shared
+  # node_modules volume and corrupt it. Keep install a separate, explicit step.
+  frontend:
+    <<: *frontend-base
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    ports:
+      - "5173:5173"
+
+  # Type-check + unit tests with coverage. NETWORK ISOLATED: a malicious
+  # postinstall or test dependency cannot phone home or pull a second-stage
+  # payload.
+  test:
+    <<: *frontend-base
+    network_mode: "none"
+    command: sh -c "npm run type-check && npm run test:coverage"
+
+  # Mutation testing. A DIAGNOSTIC, not a gate — deliberately not in CI. Finds
+  # tests that execute code without asserting anything, which is the failure
+  # mode line coverage cannot see. Slow: minutes, not seconds. Report →
+  # reports/mutation/. Scope it while iterating:
+  #   docker compose run --rm mutation npx stryker run --mutate 'src/domain/**/*.ts'
+  mutation:
+    <<: *frontend-base
+    network_mode: "none"
+    command: sh -c "npx stryker run"
+
+  # Sentinel: proves the container cannot read host $HOME and has no network.
+  # See scripts/sandbox-sentinel.sh. Network isolated like the test-runner.
+  sentinel:
+    <<: *frontend-base
+    network_mode: "none"
+    command: sh -c "/app/scripts/sandbox-sentinel.sh"
+
+  # Pre-commit checks (eslint, prettier, type-check, vitest, gitleaks) run here
+  # instead of on the host, so none of that dependency code touches your user.
+  # Unlike `test`, this service needs the repo .git (gitleaks staged scan +
+  # lint-staged read the index) — but still NO $HOME / ~/.ssh mount. The
+  # gitleaks binary is baked into the image at build time, so this runs offline.
+  hooks:
+    <<: *frontend-base
+    network_mode: "none"
+    # Invoked by .husky/pre-commit via scripts/run-hooks.sh.
+    command: sh -c "/app/scripts/hooks-in-container.sh"
+
+  # Playwright E2E. Uses the official Playwright image so chromium + its system
+  # libs are baked in — the slim Dockerfile.dev has no browser. NOT
+  # network-isolated: playwright.config.ts starts the Vite dev server
+  # (webServer) and drives it over localhost inside this one container. No ports
+  # are published, so nothing is exposed to the host. The image is pinned to a
+  # DIGEST; its tag MUST match the @playwright/test version in package.json.
+  #   docker compose run --rm e2e
+  #   docker compose run --rm e2e npx playwright test tests/e2e/wizard.spec.ts
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e
+    volumes:
+      - ./:/app:cached
+      - frontend_node_modules:/app/node_modules
+      - npm_cache:/root/.npm
+    working_dir: /app
+    environment:
+      # CI=1 → workers:1 + reuseExistingServer:false (deterministic, like CI).
+      CI: "1"
+    command: npx playwright test
+
+volumes:
+  frontend_node_modules:
+  npm_cache:
