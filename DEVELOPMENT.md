@@ -101,6 +101,28 @@ git remote add origin git@github-code-po8:code-po8/decision-weigher.git
   (`docker inspect --format '{{index .RepoDigests 0}}' <image>`), and update the
   tag and digest together.
 
+## Deployment & base path
+
+The app is a static client-side SPA (session-only), so it can be hosted anywhere
+that serves files. The **public base path is deploy-driven, never hard-coded**:
+
+- `vite.config.ts` reads `base` from `PUBLIC_BASE_PATH` (default `/`).
+- The router's basename follows the resolved base via `import.meta.env.BASE_URL`
+  (`src/routerBase.ts`), so it's configured in exactly one place per deploy.
+
+Targets:
+
+- **Root** (Docker, custom domain, local dev): don't set the variable — base is
+  `/`. Build with `npm run build`, serve `dist/` from any static server.
+- **Subpath** (e.g. served from `/decision-weigher/`): set
+  `PUBLIC_BASE_PATH=/decision-weigher/` at build time.
+- **GitHub Pages**: `.github/workflows/deploy-pages.yml` builds on push to `main`
+  with `PUBLIC_BASE_PATH=/<repo-name>/` (derived from the repo, not hard-coded)
+  and deploys. Enable once in **Settings → Pages → Source → "GitHub Actions"**.
+  `public/404.html` + a snippet in `index.html` restore deep links that a static
+  host would otherwise 404 (`pathSegmentsToKeep = 1` for a project Page under
+  `/<repo>/`; `0` for root hosting).
+
 ## Project layout
 
 ```

@@ -77,6 +77,20 @@ test('rank three cars across weighted factors, then export', async ({ page }) =>
   expect(download.suggestedFilename()).toBe('which-ev-should-i-buy.json')
 })
 
+test('uses real path-based routes and serves them directly', async ({ page }) => {
+  // Advancing the wizard updates the URL path (BrowserRouter, not hash routing).
+  await page.goto('/')
+  await page.getByLabel(/title/i).fill('Car')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page).toHaveURL(/\/factors$/)
+
+  // The dev/static server resolves a direct visit to a route to the SPA. With a
+  // fresh (empty) session the wizard guard sends an incomplete deep link back to
+  // the first step — the correct behaviour for a session-only app.
+  await page.goto('/factors')
+  await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible()
+})
+
 test('rejects a malformed import and keeps the current decision', async ({ page }) => {
   await page.goto('/')
   // Build the minimum to reach results.

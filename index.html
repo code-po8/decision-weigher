@@ -8,6 +8,27 @@
       name="description"
       content="Rank alternatives for major decisions by rating weighted factors."
     />
+    <!--
+      Restore a deep-link route that 404.html encoded as `/?/path` on static
+      hosts (GitHub Pages). Runs before the app so React Router sees the real
+      URL. No-op when there is no encoded route (normal loads, root hosting).
+      Based on rafgraph/spa-github-pages (MIT).
+    -->
+    <script>
+      ;(function () {
+        var l = window.location
+        if (l.search[1] === '/') {
+          var decoded = l.search
+            .slice(1)
+            .split('&')
+            .map(function (s) {
+              return s.replace(/~and~/g, '&')
+            })
+            .join('?')
+          window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash)
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

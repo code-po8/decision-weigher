@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Decision Weigher</title>
+    <!--
+      SPA fallback for static hosts (GitHub Pages) that 404 on deep links to
+      client-side routes (e.g. /decision-weigher/results on refresh). This
+      redirects to the app root with the original path encoded in the query
+      string; a snippet in index.html decodes it and restores the route via
+      history.replaceState before React Router mounts.
+
+      pathSegmentsToKeep = number of leading path segments that are the deploy
+      base (NOT part of the app's own routes). For a project Page served from
+      /<repo>/ this is 1; for root hosting it is 0. Adjust per deploy target.
+      Based on rafgraph/spa-github-pages (MIT).
+    -->
+    <script>
+      var pathSegmentsToKeep = 1
+
+      var l = window.location
+      l.replace(
+        l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname
+            .split('/')
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join('/') +
+          '/?/' +
+          l.pathname
+            .slice(1)
+            .split('/')
+            .slice(pathSegmentsToKeep)
+            .join('/')
+            .replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash,
+      )
+    </script>
+  </head>
+  <body></body>
+</html>
