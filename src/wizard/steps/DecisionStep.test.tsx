@@ -4,6 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { renderWizard } from '../../test/renderWizard'
 
 describe('DecisionStep', () => {
+  it('offers to restore a saved decision on the first (landing) step', () => {
+    renderWizard({ initialPath: '/' })
+    expect(
+      screen.getByRole('button', { name: /restore a saved decision/i }),
+    ).toBeInTheDocument()
+    // the hidden file input is present so a returning user can import immediately
+    expect(screen.getByLabelText(/import decision file/i)).toBeInTheDocument()
+  })
+
   it('renders a required title field and an optional description field', () => {
     renderWizard({ initialPath: '/' })
     expect(screen.getByLabelText(/title/i)).toBeInTheDocument()

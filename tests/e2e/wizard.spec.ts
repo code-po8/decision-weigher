@@ -113,3 +113,33 @@ test('rejects a malformed import and keeps the current decision', async ({ page 
   // Ranking still shows the original alternative — decision was not replaced.
   await expect(page.getByRole('list', { name: 'Ranking' })).toContainText('Only Option')
 })
+
+test('restore a saved decision from the landing step, straight to results', async ({ page }) => {
+  // Build + export a decision to get a real file, then reload to a fresh session.
+  await page.goto('/')
+  await page.getByLabel(/title/i).fill('Which EV should I buy?')
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByLabel('New factor name').fill('Reliability')
+  await page.getByRole('button', { name: 'Add factor' }).click()
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByLabel('New alternative name').fill('Tesla Model 3')
+  await page.getByRole('button', { name: 'Add alternative' }).click()
+  await page.getByLabel(/Reliability rating for Tesla Model 3/).fill('9')
+  await page.getByRole('button', { name: 'Next' }).click()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /export json/i }).click()
+  const download = await downloadPromise
+  const savedPath = await download.path()
+
+  // Simulate a returning user: fresh page, nothing entered yet.
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Your decision' })).toBeVisible()
+
+  // Restore directly from the landing step — without typing anything.
+  await page.getByLabel('Import decision file').setInputFiles(savedPath)
+
+  // Lands on results with the restored decision, no data entry required.
+  await expect(page.getByRole('heading', { name: 'Results' })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Ranking' })).toContainText('Tesla Model 3')
+})
